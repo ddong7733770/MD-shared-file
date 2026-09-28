@@ -1,0 +1,1325 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>월별 실적 관리(배포용)</title>
+  
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+  
+  <style>
+    :root {
+      --color-primary-500: #F0B90B;
+      --color-up-500: #0ECB81;
+      --color-down-500: #F6465D;
+      --bg-base: #F5F5F5;
+      --bg-elevated: #FFFFFF;
+      --bg-subtle: #F0F1F2;
+      --text-primary: #1E2329;
+      --text-secondary: #474D57;
+      --text-tertiary: #848E9C;
+      --text-on-primary: #0B0E11;
+      --border-default: #EAECEF;
+      --border-strong: #B7BDC6;
+      --radius-sm: 2px;
+      --radius-md: 4px;
+      --radius-lg: 6px;
+      --shadow-sm: 0 1px 2px rgba(24,26,32,0.06);
+    }
+
+    * { box-sizing: border-box; }
+    
+    body {
+      margin: 0; background: var(--bg-base); color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, 'Pretendard', sans-serif;
+      font-variant-numeric: tabular-nums; display: flex; height: 100vh; overflow: hidden;
+    }
+
+    /* Login Screen */
+    #login-screen {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg-base);
+      display: flex; justify-content: center; align-items: center; flex-direction: column; z-index: 9999;
+    }
+    .login-box {
+      background: var(--bg-elevated); padding: 40px 30px; border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.08); text-align: center; width: 340px;
+    }
+    .login-box h2 { margin-top: 0; font-size: 20px; margin-bottom: 24px; }
+    .login-box input { width: 100%; padding: 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); font-size: 14px; margin-bottom: 8px; text-align:center; }
+    .login-box .pw-hint { font-size: 11px; color: var(--text-tertiary); margin-bottom: 14px; }
+    .login-box .login-error { font-size: 12px; color: var(--color-down-500); font-weight: 600; margin-bottom: 12px; min-height: 16px; display: none; }
+    .login-box button { width: 100%; padding: 12px; background: var(--color-primary-500); color: var(--text-on-primary); border: none; border-radius: var(--radius-md); font-size: 15px; font-weight: 700; cursor: pointer; }
+    .login-box .loading-hint { font-size: 11px; color: var(--text-tertiary); margin-top: 16px; font-weight: 500; }
+    
+    /* Layout */
+    #dashboard-wrapper { display: none; width: 100%; height: 100%; }
+    .sidebar { width: 220px; background: var(--bg-elevated); border-right: 1px solid var(--border-default); display: flex; flex-direction: column; flex-shrink: 0; z-index: 100; }
+    .brand { height: 50px; padding: 0 24px; display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 800; border-bottom: 1px solid var(--border-default); }
+    .brand .dia { width: 14px; height: 14px; background: var(--color-primary-500); transform: rotate(45deg); }
+    .nav-menu { padding: 16px 12px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+    .nav-item { padding: 10px 16px; border-radius: var(--radius-md); font-size: 14px; font-weight: 600; cursor: pointer; color: var(--text-secondary); }
+    .nav-item:hover { background: var(--bg-subtle); color: var(--text-primary); }
+    .nav-item.active { background: rgba(240,185,11,0.15); color: #B38800; font-weight: 700; }
+    
+    .main-wrapper { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+    .topbar { height: 50px; padding: 0 20px; background: var(--bg-elevated); border-bottom: 1px solid var(--border-default); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; box-shadow: var(--shadow-sm); z-index: 50; gap: 12px; flex-wrap: wrap; }
+    .master-filter { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+    .filter-group { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; }
+    .filter-select { padding: 4px 8px; border: 1px solid var(--border-default); border-radius: var(--radius-sm); font-size: 12px; background: var(--bg-subtle); cursor: pointer; }
+    .topbar-right { display: flex; align-items: center; gap: 10px; }
+    .mode-badge { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: var(--radius-sm); background: var(--bg-subtle); color: var(--text-secondary); }
+    .btn-outline { border: 1px solid var(--border-strong); background: transparent; padding: 4px 10px; border-radius: var(--radius-md); font-size: 12px; font-weight: 600; cursor: pointer; color: var(--text-primary); transition: all 0.15s; }
+    .btn-outline:hover { border-color: var(--color-primary-500); color: #B38800; }
+    .btn-primary { border: none; background: var(--color-primary-500); padding: 8px 16px; border-radius: var(--radius-md); font-size: 13px; font-weight: 700; cursor: pointer; color: var(--text-on-primary); }
+    .btn-primary:hover { opacity: 0.92; }
+
+    .content-area { flex: 1; overflow-y: auto; padding-bottom: 60px; display: none; }
+    .content-area.active { display: block; }
+
+    .dashboard-container { max-width: 1500px; margin: 0 auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
+    
+    /* Data Notice & Drag-and-Drop Banner */
+    .data-notice-card {
+      background: var(--bg-elevated);
+      border: 2px dashed var(--border-strong);
+      border-radius: var(--radius-lg);
+      padding: 28px 24px;
+      text-align: center;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: all 0.2s ease;
+    }
+    .data-notice-card.show { display: flex; }
+    .data-notice-card.dragover {
+      border-color: var(--color-primary-500);
+      background: rgba(240, 185, 11, 0.08);
+    }
+    .data-notice-card.error-state {
+      border-color: var(--color-down-500);
+      background: rgba(246, 70, 93, 0.04);
+    }
+    .data-notice-title { font-size: 15px; font-weight: 800; color: var(--text-primary); }
+    .data-notice-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.5; max-width: 560px; }
+    .data-notice-actions { display: flex; gap: 10px; align-items: center; margin-top: 6px; }
+
+    /* Global Drag Overlay */
+    #global-drop-overlay {
+      position: fixed; inset: 0; background: rgba(30, 35, 41, 0.65);
+      z-index: 9000; display: none; justify-content: center; align-items: center;
+      pointer-events: none;
+    }
+    #global-drop-overlay.active { display: flex; }
+    .drop-overlay-box {
+      background: var(--bg-elevated); padding: 36px 48px; border-radius: 12px;
+      border: 3px dashed var(--color-primary-500); text-align: center;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.25);
+    }
+    .drop-overlay-box h3 { margin: 0 0 8px 0; font-size: 18px; color: var(--text-primary); }
+    .drop-overlay-box p { margin: 0; font-size: 13px; color: var(--text-secondary); }
+
+    /* Toast Notification */
+    #toast-msg {
+      position: fixed; bottom: 24px; right: 24px; background: #1E2329; color: #FFFFFF;
+      padding: 12px 18px; border-radius: var(--radius-lg); font-size: 12px; font-weight: 600;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.2); z-index: 9999; opacity: 0; pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+    #toast-msg.show { opacity: 1; }
+
+    .kpi-grid { display: grid; gap: 16px; }
+    .kpi-card { background: var(--bg-elevated); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: 16px 20px; display: flex; flex-direction: column; gap: 6px; }
+    .kpi-title { font-size: 13px; font-weight: 600; color: var(--text-secondary); display: flex; justify-content: space-between; }
+    .kpi-value { font-size: 24px; font-weight: 800; color: var(--text-primary); display: flex; align-items: baseline; gap: 4px; flex-wrap:wrap; }
+    .kpi-unit { font-size: 12px; font-weight: 600; color: var(--text-tertiary); }
+    .kpi-sub { font-size: 11px; font-weight: 600; color: var(--text-tertiary); margin-top: -2px; }
+    .sales-kpi-grid { grid-template-columns: repeat(3, 1fr); }
+
+    .grid-row { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    .card { background: var(--bg-elevated); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: 20px; display: flex; flex-direction: column; }
+    .card-header { font-size: 14px; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+    .card-header-left { display: flex; align-items: center; gap: 8px; }
+    .card-header-left::before { content: ''; width: 4px; height: 14px; background: var(--color-primary-500); border-radius: 2px; }
+    .chart-wrapper { position: relative; flex-grow: 1; min-height: 260px; }
+    .chart-wrapper.large { min-height: 450px; height: 450px; }
+
+    /* Custom Top 20 HTML UI */
+    .top20-container { display:flex; flex-direction:column; gap:8px; overflow-y:auto; height: 100%; min-height:450px; padding-right:10px; }
+    .top20-row { display:flex; align-items:center; width: 100%; margin-bottom: 4px; }
+    .top20-label-area { width: 50%; display: flex; align-items: center; gap: 8px; padding-right: 12px; }
+    .top20-rank { width: 24px; font-size: 13px; font-weight: 700; color: var(--text-secondary); text-align: left; flex-shrink: 0; }
+    .top20-name { font-size: 12px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+    .top20-bar-area { width: 50%; display: flex; align-items: center; gap: 8px; }
+    .top20-bar-wrap { flex: 1; height: 20px; background: var(--bg-subtle); border-radius: 4px; overflow: hidden; position: relative; }
+    .top20-bar-fill { height: 100%; background: #1E2329; transition: width 0.3s ease; }
+    .top20-value { font-size: 12px; font-weight: 700; color: var(--text-primary); min-width: 40px; text-align: right; }
+
+    .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .data-table th, .data-table td { padding: 10px 8px; text-align: right; border-bottom: 1px solid var(--border-default); }
+    .data-table th { color: var(--text-tertiary); font-weight: 600; background: var(--bg-subtle); cursor: pointer; position: sticky; top:0; z-index:10; user-select: none;}
+    .data-table th:hover { color: var(--color-primary-500); }
+    .data-table th:first-child, .data-table td:first-child { text-align: left; }
+
+    .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+    .tab-btn { padding: 4px 10px; font-size: 12px; font-weight: 600; border: 1px solid var(--border-default); border-radius: var(--radius-sm); background: var(--bg-subtle); cursor: pointer; }
+    .tab-btn.active { background: var(--color-primary-500); color: var(--text-on-primary); border-color: var(--color-primary-500); }
+    
+    #file-input { display: none; }
+
+    @media (max-width: 900px) {
+      .sales-kpi-grid { grid-template-columns: 1fr; }
+      .sidebar { width: 170px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Login Screen -->
+  <div id="login-screen">
+    <div class="login-box">
+      <h2>월별 실적 관리(배포용)</h2>
+      <input type="password" id="pwInput" placeholder="패스워드 입력" onkeydown="if(event.key==='Enter') checkPassword()">
+      <div class="pw-hint">대/소문자, 숫자, 특수기호 구분</div>
+      <div id="loginErrorMsg" class="login-error">패스워드를 확인해주세요.</div>
+      <button onclick="checkPassword()">데이터 확인하기</button>
+      <div class="loading-hint" id="login-mode-hint">데이터 연결 준비 중...</div>
+    </div>
+  </div>
+
+  <!-- Global Drag & Drop Overlay -->
+  <div id="global-drop-overlay">
+    <div class="drop-overlay-box">
+      <h3>📂 엑셀 파일(data.xlsx) 놓기</h3>
+      <p>파일을 여기에 놓으면 즉시 데이터를 분석하여 차트를 갱신합니다.</p>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast-msg"></div>
+
+  <!-- Dashboard Wrapper -->
+  <div id="dashboard-wrapper">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="dia"></div>
+        <span>아이코닉스 실적</span>
+      </div>
+      <nav class="nav-menu">
+        <div class="nav-item active" onclick="switchTab('sales', this)">📊 매출 현황</div>
+        <div class="nav-item" id="nav-master" onclick="switchTab('master', this)" style="display: none; margin-top: auto; border-top: 1px solid var(--border-default); border-radius: 0; padding-top: 16px;">⚙️ 마스터 관리</div>
+      </nav>
+    </aside>
+
+    <main class="main-wrapper">
+      <header class="topbar">
+        <!-- 마스터 옵션 영역 ('영업팀' 항목 삭제 완료) -->
+        <div class="master-filter" id="master-filter-container">
+          <div class="filter-group">
+            <label>연도</label><select id="filterYear" class="filter-select" onchange="applyFilters()"><option value="ALL">전체</option></select>
+          </div>
+          <div class="filter-group">
+            <label>월</label><select id="filterMonth" class="filter-select" onchange="applyFilters()"><option value="ALL">전체</option></select>
+          </div>
+          <div class="filter-group">
+            <label>IP</label>
+            <select id="filterIP" class="filter-select" onchange="applyFilters()">
+              <option value="ALL">전체</option><option value="뽀로로">뽀로로</option><option value="타요">타요</option>
+              <option value="퍼글러">퍼글러</option><option value="잔망루피">잔망루피</option>
+              <option value="데코데코">데코데코</option><option value="해치">해치</option><option value="기타">기타</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label>코드</label>
+            <select id="filterCode" class="filter-select" onchange="applyFilters()">
+              <option value="ALL">전체</option>
+              <option value="T1">문완구(T1)</option>
+              <option value="P1">출판(P1)</option>
+              <option value="L1">굿즈(L1)</option>
+              <option value="T2">수입완구(T2)</option>
+              <option value="ETC">기타</option>
+            </select>
+            <!-- 마스터 옵션 영역 리뉴얼 합산 버튼 -->
+            <button id="btn-master-renewal" class="btn-outline" style="margin-left:4px;" onclick="toggleMasterRenewal()">리뉴얼 합산</button>
+          </div>
+        </div>
+
+        <div class="topbar-right">
+          <span id="env-badge" class="mode-badge">모드 확인 중</span>
+          <span id="update-status" style="font-size:11px; color:var(--text-tertiary); font-weight:600;">데이터 로드 대기중...</span>
+          <button class="btn-outline" onclick="document.getElementById('file-input').click()">파일 선택 (data.xlsx)</button>
+          <input type="file" id="file-input" accept=".xlsx, .xls">
+        </div>
+      </header>
+
+      <!-- ==================== TAB 1: 매출 현황 ==================== -->
+      <section id="view-sales" class="content-area active">
+        <div class="dashboard-container">
+
+          <!-- 데이터 안내 및 로컬 파일 선택 / 드래그&드롭 영역 -->
+          <div id="data-notice-box" class="data-notice-card">
+            <div id="data-notice-title" class="data-notice-title">📂 데이터 파일(data.xlsx)을 불러와주세요</div>
+            <div id="data-notice-desc" class="data-notice-desc">
+              현재 로컬 파일(file://) 모드로 실행되었습니다. 아래 [파일 선택] 버튼을 클릭하거나 <strong>data.xlsx</strong> 파일을 이 영역(또는 화면 아무 곳)에 드래그 & 드롭하면 즉시 차트가 표시됩니다.
+            </div>
+            <div class="data-notice-actions">
+              <button class="btn-primary" onclick="document.getElementById('file-input').click()">📁 data.xlsx 파일 선택</button>
+              <button id="btn-retry-fetch" class="btn-outline" style="display:none; padding: 8px 14px;" onclick="fetchDataFromServer()">🔄 서버 재시도</button>
+            </div>
+          </div>
+
+          <!-- Sales KPI -->
+          <div class="kpi-grid sales-kpi-grid">
+            <div class="kpi-card">
+              <div class="kpi-title">매출액</div>
+              <div class="kpi-value">
+                <span id="kpi-revenue">-</span> <span class="kpi-unit">억원</span>
+                <div id="kpi-rev-trends" style="display:flex; gap:8px; font-size:12px; font-weight:600; margin-left:12px;"></div>
+              </div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-title">판매수량</div>
+              <div class="kpi-value"><span id="kpi-qty">-</span> <span class="kpi-unit">개</span></div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-title">평균 판매단가</div>
+              <div class="kpi-value"><span id="kpi-asp">-</span> <span class="kpi-unit">원</span></div>
+            </div>
+          </div>
+
+          <!-- Row 1: 월별 매출 추세 -->
+          <div class="grid-row">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-header-left">
+                  월별 매출 추세 (선택월 기준 이전 12개월)
+                  <span style="font-size:11px; font-weight:normal; color:var(--text-tertiary); margin-left:6px;">(단위 : 백만원)</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:12px;">
+                  <span id="yoy-trend-text" style="font-size:12px; font-weight:bold;"></span>
+                  <button class="tab-btn" id="btn-yoy" onclick="toggleYoY()">전년 동월 비교</button>
+                </div>
+              </div>
+              <div class="chart-wrapper"><canvas id="trendChart"></canvas></div>
+            </div>
+          </div>
+
+          <!-- Row 2: 매출 TOP 20 -->
+          <div class="grid-row">
+            <div class="card">
+              <div class="card-header" style="justify-content: space-between;">
+                <div class="card-header-left">
+                  매출 TOP 20
+                  <!-- TOP 20 영역 리뉴얼 합산 버튼 -->
+                  <button id="btn-top20-renewal" class="btn-outline" style="margin-left:8px; font-size:11px; padding:2px 6px;" onclick="toggleTop20Renewal()">리뉴얼 합산</button>
+                </div>
+                <div style="display:flex; align-items:center; gap: 12px;">
+                  <span style="font-size:11px; color:var(--text-tertiary);">단위 : 백만원</span>
+                  <div class="tabs" id="top20Tabs">
+                    <button class="tab-btn active" onclick="updateTop20('ALL')">전체</button>
+                    <button class="tab-btn" onclick="updateTop20('T1')">문완구(T1)</button>
+                    <button class="tab-btn" onclick="updateTop20('P1')">출판(P1)</button>
+                    <button class="tab-btn" onclick="updateTop20('L1')">굿즈(L1)</button>
+                    <button class="tab-btn" onclick="updateTop20('T2')">수입완구(T2)</button>
+                  </div>
+                </div>
+              </div>
+              <div class="chart-wrapper large">
+                <div id="top20Container" class="top20-container">
+                  <div style="padding: 20px; text-align:center; color:var(--text-tertiary); font-size:12px;">데이터를 불러오면 매출 TOP 20 내역이 표시됩니다.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== TAB 2: 마스터 관리 ==================== -->
+      <section id="view-master" class="content-area">
+        <div class="dashboard-container">
+          <div class="grid-row" style="grid-template-columns: 1fr; gap: 20px;">
+            
+            <!-- 접속 로그 카드 -->
+            <div class="card">
+              <div class="card-header">
+                <div class="card-header-left">최근 30일 접속 로그</div>
+                <button class="btn-outline" style="background:#1E80FF; color:#fff; border:none;" onclick="downloadLogExcel()">엑셀 다운로드</button>
+              </div>
+              <div style="font-size:11px; color:var(--text-tertiary); margin-bottom:12px; margin-top:-6px;">
+                * 주의: 접속 로그 데이터는 현재 접속 중인 로컬 브라우저 캐시에만 수집됩니다. 다른 기기의 접속 내역은 알 수 없습니다.
+              </div>
+              <div style="overflow-y:auto; max-height:500px; border:1px solid var(--border-default); border-radius:var(--radius-md);">
+                <table class="data-table">
+                  <thead style="position: sticky; top: 0; z-index: 10;">
+                    <tr>
+                      <th style="text-align:center;">접속일시 (Timestamp)</th>
+                      <th style="text-align:center;">IP Address</th>
+                      <th style="text-align:left;">OS</th>
+                      <th style="text-align:left;">User Agent</th>
+                    </tr>
+                  </thead>
+                  <tbody id="logTableBody">
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+      
+    </main>
+  </div>
+
+  <script>
+    Chart.register(ChartDataLabels);
+
+    // ================== 데이터 경로 및 전역 상태 설정 ==================
+    // 같은 서버의 상대경로 './data.xlsx' 사용 (전체 URL 사용 금지)
+    const DATA_URL = './data.xlsx';
+
+    // Master & User Password Config
+    const MASTER_PW = '01026463771!';
+    const USER_PW = '2026';
+    let currentUserRole = 'user'; // 'master' or 'user'
+
+    let rawSales = [];
+    let prodDict = {};
+    let globalProductMeta = {}; 
+    let charts = {};
+    let isFirstLoad = true;
+    let midnightTimeoutId = null;
+    let dailyIntervalId = null;
+    
+    let currentFilters = { year: 'ALL', month: 'ALL', ip: 'ALL', code: 'ALL' };
+    let availableMonths = new Set();
+    let currentTop20Type = 'ALL';
+    
+    // 리뉴얼 및 전년 비교 상태 변수
+    let isMasterRenewal = false;
+    let isTop20Renewal = false;
+    let showYoY = false;
+
+    // ================== 유틸리티 함수 ==================
+    const toHMil2 = (val) => (val / 100000000).toFixed(2); 
+    const formatNum = (val) => new Intl.NumberFormat('ko-KR').format(Math.round(val));
+    
+    const parseQty = (val) => {
+      if (val === undefined || val === null) return 0;
+      if (typeof val === 'number') return isNaN(val) ? 0 : val;
+      let s = String(val).replace(/,/g, '').trim();
+      if (s === '' || s === '-' || s === '.') return 0;
+      let n = parseFloat(s);
+      return isNaN(n) ? 0 : n;
+    };
+
+    function showToast(message) {
+      const toast = document.getElementById('toast-msg');
+      if (!toast) return;
+      toast.innerText = message;
+      toast.classList.add('show');
+      clearTimeout(toast._timer);
+      toast._timer = setTimeout(() => {
+        toast.classList.remove('show');
+      }, 3200);
+    }
+    
+    function parseDateToYm(val) {
+      if(!val) return null;
+      let d = null;
+      if(typeof val === 'number') d = new Date(Math.round((val - 25569)*86400*1000));
+      else if(typeof val === 'string') {
+        let m = val.match(/(\d{4})[-/.](\d{1,2})/);
+        if(m) d = new Date(m[1], m[2]-1, 1);
+        else d = new Date(val);
+      } else if(val instanceof Date) d = val;
+      
+      if(d && !isNaN(d.getTime())) {
+        let y = d.getFullYear();
+        let m = d.getMonth() + 1;
+        return { 
+          d: d, 
+          y: y + '년', 
+          m: m + '월', 
+          ym: `${y}-${String(m).padStart(2, '0')}` 
+        };
+      }
+      return null;
+    }
+
+    function classifyIP(str) {
+      if(!str) return '기타';
+      const k = ['뽀로로', '타요', '퍼글러', '잔망루피', '데코데코', '해치'];
+      for(let i=0; i<k.length; i++) if(str.includes(k[i])) return k[i];
+      return '기타';
+    }
+
+    function updateRenewalButtonStyles() {
+      const masterBtn = document.getElementById('btn-master-renewal');
+      if (masterBtn) {
+        masterBtn.style.background = isMasterRenewal ? 'var(--text-primary)' : 'transparent';
+        masterBtn.style.color = isMasterRenewal ? '#fff' : 'var(--text-primary)';
+      }
+      const top20Btn = document.getElementById('btn-top20-renewal');
+      if (top20Btn) {
+        top20Btn.style.background = isTop20Renewal ? 'var(--text-primary)' : 'transparent';
+        top20Btn.style.color = isTop20Renewal ? '#fff' : 'var(--text-primary)';
+      }
+    }
+
+    function toggleMasterRenewal() {
+      isMasterRenewal = !isMasterRenewal;
+      isTop20Renewal = isMasterRenewal; // 마스터 리뉴얼 합산 시 TOP 20 리뉴얼 합산도 연동
+      updateRenewalButtonStyles();
+      applyFilters();
+    }
+
+    function toggleTop20Renewal() {
+      isTop20Renewal = !isTop20Renewal;
+      updateRenewalButtonStyles();
+      updateTop20(currentTop20Type);
+    }
+
+    // 리뉴얼 합산 여부에 따라 유효 품목코드(L열 서브품번 우선), 코드구분(type), IP, 품목명을 반환
+    function getEffectiveProduct(r, useRenewal) {
+      let targetCode = (useRenewal && r._subCode) ? r._subCode : r._code;
+      let meta = targetCode ? globalProductMeta[targetCode] : null;
+      let effType = (meta && meta.type) ? meta.type : (targetCode && targetCode.length >= 4 ? targetCode.substring(2, 4) : r._type);
+      let effIp = (meta && meta.ip) ? meta.ip : r._ip;
+      let effName = (meta && meta.name) ? meta.name : (r['품목명'] || targetCode);
+      return {
+        code: targetCode || r['품목명'] || 'UNKNOWN',
+        type: effType,
+        ip: effIp,
+        name: effName
+      };
+    }
+
+    // ================== 실행 환경 자동 분기 및 업데이트 스케줄러 ==================
+    window.addEventListener('DOMContentLoaded', () => {
+      initDataEnvironment();
+      setupFileAndDragDropListeners();
+    });
+
+    // 매일 0시 0분(자정) 1회 자동 업데이트 타이머 설정
+    function setupDailyMidnightUpdate() {
+      if (midnightTimeoutId) clearTimeout(midnightTimeoutId);
+      if (dailyIntervalId) clearInterval(dailyIntervalId);
+
+      const now = new Date();
+      const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0);
+      const msUntilMidnight = nextMidnight.getTime() - now.getTime();
+
+      midnightTimeoutId = setTimeout(() => {
+        fetchDataFromServer();
+        dailyIntervalId = setInterval(fetchDataFromServer, 24 * 60 * 60 * 1000);
+      }, msUntilMidnight);
+    }
+
+    function initDataEnvironment() {
+      const protocol = window.location.protocol;
+      const envBadge = document.getElementById('env-badge');
+      const loginHint = document.getElementById('login-mode-hint');
+      const updateStatusEl = document.getElementById('update-status');
+
+      if (protocol === 'http:' || protocol === 'https:') {
+        // 1) http/https 로 열린 경우 (Cloudflare R2 · 로컬 서버)
+        envBadge.innerText = '🌐 서버 연결 (매일 00:00 갱신)';
+        envBadge.style.background = 'rgba(14, 203, 129, 0.15)';
+        envBadge.style.color = '#09925C';
+        loginHint.innerText = '서버 모드: 최초 접속 시 1회 및 매일 0시 0분 자동 갱신';
+
+        // 최초 접속 시 1회 로드 + 매일 0시 0분 1회 로드 예약
+        fetchDataFromServer();
+        setupDailyMidnightUpdate();
+
+      } else if (protocol === 'file:') {
+        // 2) file:// 로 열린 경우 (사용자가 HTML 파일을 더블클릭)
+        envBadge.innerText = '📂 로컬 파일 모드 (수동 선택)';
+        envBadge.style.background = 'rgba(240, 185, 11, 0.2)';
+        envBadge.style.color = '#B38800';
+        loginHint.innerText = '로컬 모드: 진입 후 data.xlsx 파일을 선택하거나 드래그&드롭 해주세요.';
+        updateStatusEl.innerText = '파일 선택 대기중...';
+
+        showDataNotice(
+          '📂 로컬 실행 모드: data.xlsx 파일을 선택하거나 드래그 & 드롭 해주세요',
+          '브라우저 보안 정책상 file:// 환경에서는 자동 서버 요청을 수행하지 않습니다. 아래 [data.xlsx 파일 선택] 버튼을 누르거나 엑셀 파일을 화면에 끌어다 놓으면 즉시 데이터가 반영됩니다.',
+          false,
+          false
+        );
+      } else {
+        // 기타 프로토콜 예외 처리
+        envBadge.innerText = '파일/서버 호환 모드';
+        fetchDataFromServer();
+        setupDailyMidnightUpdate();
+      }
+    }
+
+    // 서버 모드('./data.xlsx') 자동 Fetch 함수
+    async function fetchDataFromServer() {
+      const updateStatusEl = document.getElementById('update-status');
+      updateStatusEl.innerText = '데이터 불러오는 중...';
+
+      // 캐시 무력화: '?t=' + Date.now() 및 cache: 'no-store' 적용
+      const fetchUrl = `${DATA_URL}?t=${Date.now()}`;
+
+      try {
+        const response = await fetch(fetchUrl, { cache: 'no-store' });
+        if (!response.ok) {
+          throw new Error(`HTTP 오류 (상태 코드: ${response.status})`);
+        }
+
+        const arrayBuffer = await response.arrayBuffer();
+        if (!arrayBuffer || arrayBuffer.byteLength < 100) {
+          throw new Error('유효하지 않거나 비어 있는 파일입니다.');
+        }
+
+        parseWorkbook(arrayBuffer);
+        hideDataNotice();
+
+        const now = new Date();
+        updateStatusEl.innerText = `최종 갱신: ${now.toLocaleTimeString()} (자동)`;
+      } catch (err) {
+        console.warn('data.xlsx 자동 로드 실패:', err);
+        updateStatusEl.innerText = '데이터 로드 실패 (안내 확인)';
+
+        showDataNotice(
+          '⚠️ 데이터를 불러오지 못했습니다 (./data.xlsx)',
+          `같은 경로에서 ./data.xlsx 파일을 찾을 수 없거나 읽기에 실패했습니다 (${err.message}). 서버에 data.xlsx 파일이 업로드되어 있는지 확인하거나, 아래 버튼 또는 드래그 & 드롭으로 파일을 직접 불러올 수 있습니다.`,
+          true,
+          true
+        );
+      }
+    }
+
+    // 안내 배너 표시/숨김 제어
+    function showDataNotice(title, desc, isError, showRetryBtn) {
+      const box = document.getElementById('data-notice-box');
+      const titleEl = document.getElementById('data-notice-title');
+      const descEl = document.getElementById('data-notice-desc');
+      const retryBtn = document.getElementById('btn-retry-fetch');
+
+      titleEl.innerText = title;
+      descEl.innerText = desc;
+      box.classList.add('show');
+      box.classList.toggle('error-state', !!isError);
+      retryBtn.style.display = showRetryBtn ? 'inline-block' : 'none';
+    }
+
+    function hideDataNotice() {
+      const box = document.getElementById('data-notice-box');
+      if (box) {
+        box.classList.remove('show', 'error-state');
+      }
+    }
+
+    // 로컬 파일 읽기 공용 처리 (FileReader -> ArrayBuffer -> parseWorkbook)
+    function handleLocalFile(file) {
+      if (!file) return;
+      const fileName = file.name.toLowerCase();
+      if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.xls')) {
+        showToast('엑셀 파일(.xlsx 또는 .xls)만 불러올 수 있습니다.');
+        return;
+      }
+
+      const updateStatusEl = document.getElementById('update-status');
+      updateStatusEl.innerText = `'${file.name}' 읽는 중...`;
+
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          parseWorkbook(ev.target.result);
+          hideDataNotice();
+          const now = new Date();
+          updateStatusEl.innerText = `최종 갱신: ${now.toLocaleTimeString()} (${file.name})`;
+          showToast(`'${file.name}' 데이터를 성공적으로 반영했습니다.`);
+        } catch (err) {
+          console.error('엑셀 파일 파싱 오류:', err);
+          updateStatusEl.innerText = '파일 파싱 오류';
+          showDataNotice(
+            '⚠️ 엑셀 파일 분석 중 오류가 발생했습니다',
+            `선택하신 파일(${file.name})의 시트 구조('영업본부 누적매출')가 올바른지 확인 후 다시 선택해 주세요.`,
+            true,
+            window.location.protocol === 'http:' || window.location.protocol === 'https:'
+          );
+        }
+      };
+      reader.onerror = () => {
+        updateStatusEl.innerText = '파일 읽기 실패';
+        showToast('파일을 읽는 중 오류가 발생했습니다.');
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function setupFileAndDragDropListeners() {
+      const fileInput = document.getElementById('file-input');
+      const noticeBox = document.getElementById('data-notice-box');
+      const overlay = document.getElementById('global-drop-overlay');
+
+      // 1) 파일 선택 input 이벤트
+      fileInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files.length > 0) {
+          handleLocalFile(e.target.files[0]);
+          e.target.value = ''; // 동일 파일 재선택 시에도 동작하도록 초기화
+        }
+      });
+
+      // 2) 배너 영역 및 전체 윈도우 드래그 & 드롭 지원
+      let dragCounter = 0;
+
+      window.addEventListener('dragenter', (e) => {
+        e.preventDefault();
+        dragCounter++;
+        if (document.getElementById('dashboard-wrapper').style.display === 'flex') {
+          overlay.classList.add('active');
+        }
+      });
+
+      window.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+      });
+
+      window.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        dragCounter--;
+        if (dragCounter <= 0) {
+          dragCounter = 0;
+          overlay.classList.remove('active');
+          noticeBox.classList.remove('dragover');
+        }
+      });
+
+      window.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dragCounter = 0;
+        overlay.classList.remove('active');
+        noticeBox.classList.remove('dragover');
+
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+          handleLocalFile(e.dataTransfer.files[0]);
+        }
+      });
+    }
+
+    // ================== 로그인 및 마스터 접속 로그 관리 ==================
+    async function checkPassword() {
+      const pwInput = document.getElementById('pwInput');
+      const errEl = document.getElementById('loginErrorMsg');
+      const pw = pwInput.value;
+
+      if (pw === MASTER_PW) {
+        currentUserRole = 'master';
+        errEl.style.display = 'none';
+        document.getElementById('nav-master').style.display = 'block';
+        await executeLogin();
+      } else if (pw === USER_PW) {
+        currentUserRole = 'user';
+        errEl.style.display = 'none';
+        document.getElementById('nav-master').style.display = 'none';
+        await executeLogin();
+      } else {
+        errEl.style.display = 'block';
+        pwInput.focus();
+      }
+    }
+
+    async function executeLogin() {
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('dashboard-wrapper').style.display = 'flex';
+      
+      // 차트 크기 재계산 보장
+      if (charts['trendChart']) {
+        charts['trendChart'].resize();
+      }
+
+      recordLoginLog().then(() => {
+        if(currentUserRole === 'master') renderMasterLogs();
+      });
+    }
+
+    async function recordLoginLog() {
+      let ip = 'Unknown';
+      if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
+        try {
+          let res = await fetch('https://api.ipify.org?format=json');
+          let data = await res.json();
+          ip = data.ip;
+        } catch (e) {
+          ip = 'Local/Restricted';
+        }
+      } else {
+        ip = 'Local (file://)';
+      }
+
+      const ua = navigator.userAgent;
+      let os = 'Unknown OS';
+      if (ua.indexOf("Win") !== -1) os = "Windows";
+      if (ua.indexOf("Mac") !== -1) os = "MacOS";
+      if (ua.indexOf("X11") !== -1) os = "UNIX";
+      if (ua.indexOf("Linux") !== -1) os = "Linux";
+      if (/Android/.test(ua)) os = "Android";
+      if (/iPhone|iPad|iPod/.test(ua)) os = "iOS";
+
+      const now = new Date();
+      const logEntry = {
+        timestamp: now.toISOString(),
+        ip_address: ip,
+        os: os,
+        user_agent: ua
+      };
+
+      try {
+        let logs = JSON.parse(localStorage.getItem('accessLogs') || '[]');
+        logs.push(logEntry);
+
+        const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+        logs = logs.filter(l => new Date(l.timestamp) >= thirtyDaysAgo);
+
+        localStorage.setItem('accessLogs', JSON.stringify(logs));
+      } catch (storageErr) {
+        console.warn('localStorage 접근 제한:', storageErr);
+      }
+    }
+
+    function renderMasterLogs() {
+      let logs = [];
+      try {
+        logs = JSON.parse(localStorage.getItem('accessLogs') || '[]');
+      } catch (e) {
+        logs = [];
+      }
+      logs.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)); 
+
+      let tbody = document.getElementById('logTableBody');
+      tbody.innerHTML = '';
+      
+      if (logs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding: 20px; color:var(--text-tertiary);">접속 로그가 없습니다.</td></tr>';
+        return;
+      }
+
+      logs.forEach(l => {
+        let d = new Date(l.timestamp);
+        let dStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+        
+        tbody.innerHTML += `
+          <tr>
+            <td style="text-align:center; font-weight:600;">${dStr}</td>
+            <td style="text-align:center;">${l.ip_address}</td>
+            <td style="text-align:left;">${l.os}</td>
+            <td style="text-align:left; font-size:10px; color:var(--text-tertiary); max-width:400px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${l.user_agent}">${l.user_agent}</td>
+          </tr>
+        `;
+      });
+    }
+
+    function downloadLogExcel() {
+      let logs = JSON.parse(localStorage.getItem('accessLogs') || '[]');
+      if(logs.length === 0) {
+        showToast('다운로드할 접속 로그가 없습니다.');
+        return;
+      }
+
+      let sheetData = logs.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).map(l => {
+        let d = new Date(l.timestamp);
+        let dStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+        return {
+          '접속일시(Timestamp)': dStr,
+          'IP Address': l.ip_address,
+          'OS': l.os,
+          'User Agent': l.user_agent
+        };
+      });
+
+      let wb = XLSX.utils.book_new();
+      let ws = XLSX.utils.json_to_sheet(sheetData);
+      XLSX.utils.book_append_sheet(wb, ws, "접속로그");
+      XLSX.writeFile(wb, "접속로그_데이터.xlsx");
+    }
+
+    function switchTab(viewId, el) {
+      document.querySelectorAll('.nav-item').forEach(e => e.classList.remove('active'));
+      el.classList.add('active');
+      document.querySelectorAll('.content-area').forEach(e => e.classList.remove('active'));
+      document.getElementById('view-' + viewId).classList.add('active');
+      
+      document.getElementById('master-filter-container').style.display = viewId === 'sales' ? 'flex' : 'none';
+      if(viewId === 'master') renderMasterLogs();
+    }
+
+    // ================== 공용 워크북 파싱 및 렌더링 로직 ==================
+    function parseWorkbook(buffer) {
+      const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+      
+      // '제품정보' 시트가 있으면 코드별 기본 품목명/메타 정보 추출
+      prodDict = {};
+      const pSheet = workbook.Sheets['제품정보'];
+      if (pSheet) {
+        const pRowsA = XLSX.utils.sheet_to_json(pSheet, { header: "A", defval: "" });
+        let codeCol = 'A';
+        let nameCol = 'B';
+        for (let i = 0; i < Math.min(pRowsA.length, 10); i++) {
+          if (pRowsA[i]) {
+            for (let key in pRowsA[i]) {
+              let v = String(pRowsA[i][key]).replace(/\s+/g, '');
+              if (v === '코드' || v === '품목코드' || v === '품목') codeCol = key;
+              if (v === '품목명' || v === '제품명' || v === '상품명') nameCol = key;
+            }
+          }
+        }
+        for (let i = 0; i < pRowsA.length; i++) {
+          let c = String(pRowsA[i][codeCol] || '').trim();
+          let n = String(pRowsA[i][nameCol] || '').trim();
+          if (c && c !== '코드' && c !== '품목코드' && c !== '품목') {
+            prodDict[c] = { name: n };
+          }
+        }
+      }
+
+      // '영업본부 누적매출' 시트 탐색 (없을 경우 첫 번째 시트 폴백)
+      let sSheet = workbook.Sheets['영업본부 누적매출'];
+      if (!sSheet && workbook.SheetNames.length > 0) {
+        sSheet = workbook.Sheets[workbook.SheetNames[0]];
+      }
+      if (!sSheet) {
+        throw new Error('엑셀 파일에서 매출 시트를 찾을 수 없습니다.');
+      }
+
+      // A열~Z열 알파벳 키 기준으로 전체 행 파싱 (L열 서브품번을 정확히 추출하기 위함)
+      let rawDataA = XLSX.utils.sheet_to_json(sSheet, { header: "A", raw: false, dateNF: 'yyyy-mm-dd', defval: "" });
+      let headerIdx = 0;
+      for(let i = 0; i < Math.min(rawDataA.length, 10); i++) {
+        let row = rawDataA[i];
+        if(row && Object.values(row).some(v => typeof v === 'string' && v.replace(/\s+/g, '') === '품목명')) {
+          headerIdx = i;
+          break;
+        }
+      }
+
+      // 헤더 컬럼 매핑 생성 (예: '매출일자' -> 'A', '품목' -> 'D', '서브품번' -> 'L' 등)
+      const headerRow = rawDataA[headerIdx] || {};
+      const colMap = {};
+      for (let colLetter in headerRow) {
+        let colTitle = String(headerRow[colLetter] || '').trim();
+        let cleanTitle = colTitle.replace(/\s+/g, '');
+        if (cleanTitle) {
+          colMap[cleanTitle] = colLetter;
+        }
+      }
+
+      const getColVal = (rowA, cleanName, fallbackLetter) => {
+        if (colMap[cleanName] && rowA[colMap[cleanName]] !== undefined) {
+          return rowA[colMap[cleanName]];
+        }
+        if (fallbackLetter && rowA[fallbackLetter] !== undefined) {
+          return rowA[fallbackLetter];
+        }
+        return '';
+      };
+
+      let years = new Set(), months = new Set();
+      globalProductMeta = {};
+      let processedSales = [];
+
+      // 1차 패스: 각 행 데이터 파싱 및 본래 품목코드(_code) 기준 globalProductMeta 우선 등록
+      for(let i = headerIdx + 1; i < rawDataA.length; i++) {
+        let rowA = rawDataA[i];
+        if (!rowA) continue;
+
+        let dateVal = getColVal(rowA, '매출일자');
+        let d = parseDateToYm(dateVal);
+        if (!d && !getColVal(rowA, '품목') && !getColVal(rowA, '품목명')) continue;
+
+        let code = String(getColVal(rowA, '품목') || '').trim();
+        let prodName = String(getColVal(rowA, '품목명') || '').trim();
+        let groupName = String(getColVal(rowA, '품목군명') || '').trim();
+        let team = String(getColVal(rowA, '구분') || '기타').trim();
+
+        // L열(서브품번) 추출: L열 값을 직접 확인하고, 헤더명 '서브품번' 컬럼도 함께 확인
+        let subCodeFromL = rowA['L'] !== undefined ? String(rowA['L']).trim() : '';
+        let subCodeFromNamed = colMap['서브품번'] ? String(rowA[colMap['서브품번']] || '').trim() : '';
+        let subCode = subCodeFromL || subCodeFromNamed;
+        if (subCode === '-' || subCode === '0' || subCode === '서브품번') {
+          subCode = '';
+        }
+
+        let ip = classifyIP(groupName + ' ' + prodName);
+        let type = code.length >= 4 ? code.substring(2, 4) : '기타';
+
+        let revNormal = parseQty(getColVal(rowA, '금액'));
+        let revVat = parseQty(getColVal(rowA, '합계(부가세포함)'));
+        let rev = (team === '해외영업팀') ? revVat : revNormal;
+        let qty = parseQty(getColVal(rowA, '수량'));
+
+        let r = {
+          '매출일자': dateVal,
+          '품목': code,
+          '품목명': prodName,
+          '품목군명': groupName,
+          '구분': team,
+          '서브품번': subCode,
+          _code: code,
+          _subCode: subCode,
+          _ip: ip,
+          _type: type,
+          _rev: rev,
+          _qty: qty
+        };
+
+        if (d) {
+          r._date = d.d;
+          r._y = d.y;
+          r._m = d.m;
+          r._ym = d.ym;
+          years.add(d.y);
+          months.add(d.m);
+        }
+
+        processedSales.push(r);
+
+        // 본래 품목코드(품목 컬럼)의 메타데이터를 최우선으로 등록
+        if (code && !globalProductMeta[code]) {
+          globalProductMeta[code] = {
+            name: prodName || (prodDict[code] && prodDict[code].name) || code,
+            ip: ip,
+            type: type
+          };
+        }
+      }
+
+      // 2차 패스: L열 서브품번(_subCode)만 존재하고 본래 품목코드로 등장한 적 없는 코드의 메타데이터 보완
+      for (let i = 0; i < processedSales.length; i++) {
+        let r = processedSales[i];
+        let subCode = r._subCode;
+        if (subCode && !globalProductMeta[subCode]) {
+          let sType = subCode.length >= 4 ? subCode.substring(2, 4) : '기타';
+          let dictName = (prodDict[subCode] && prodDict[subCode].name) ? prodDict[subCode].name : '';
+          globalProductMeta[subCode] = {
+            name: dictName || r['품목명'] || subCode,
+            ip: dictName ? classifyIP(dictName) : r._ip,
+            type: sType
+          };
+        }
+      }
+
+      rawSales = processedSales;
+
+      // 자동 갱신 시 사용자의 기존 필터 선택값 유지
+      const prevYear = document.getElementById('filterYear').value;
+      const prevMonth = document.getElementById('filterMonth').value;
+      const prevIP = document.getElementById('filterIP').value;
+      const prevCode = document.getElementById('filterCode').value;
+
+      const sortedYears = Array.from(years).sort().reverse();
+      const sortedMonths = Array.from(months).sort((a,b) => parseInt(a) - parseInt(b));
+
+      updateSelect('filterYear', sortedYears);
+      updateSelect('filterMonth', sortedMonths);
+
+      if (isFirstLoad) {
+        document.getElementById('filterYear').value = 'ALL';
+        document.getElementById('filterMonth').value = 'ALL';
+        document.getElementById('filterIP').value = 'ALL';
+        document.getElementById('filterCode').value = 'ALL';
+        isFirstLoad = false;
+      } else {
+        document.getElementById('filterYear').value = sortedYears.includes(prevYear) ? prevYear : 'ALL';
+        document.getElementById('filterMonth').value = sortedMonths.includes(prevMonth) ? prevMonth : 'ALL';
+        document.getElementById('filterIP').value = prevIP || 'ALL';
+        document.getElementById('filterCode').value = prevCode || 'ALL';
+      }
+
+      applyFilters();
+    }
+
+    function updateSelect(id, values) {
+      const sel = document.getElementById(id);
+      if(!sel) return;
+      sel.innerHTML = '<option value="ALL">전체</option>';
+      values.forEach(v => sel.innerHTML += `<option value="${v}">${v}</option>`);
+    }
+
+    function isCurrentPeriod(r) {
+      if (currentFilters.year === 'ALL' && currentFilters.month === 'ALL') return true;
+      if (currentFilters.year !== 'ALL' && currentFilters.month === 'ALL') return r._y === currentFilters.year;
+      return r._y === currentFilters.year && r._m === currentFilters.month;
+    }
+
+    function isPrevPeriod(r) {
+      if (currentFilters.year === 'ALL' && currentFilters.month === 'ALL') return false;
+      if (currentFilters.year !== 'ALL' && currentFilters.month === 'ALL') {
+        let prevYear = (parseInt(currentFilters.year) - 1) + '년';
+        return r._y === prevYear && availableMonths.has(r._m);
+      }
+      let targetYM = getTargetYM();
+      let prevYM = getPrevYM(targetYM);
+      return r._ym === prevYM;
+    }
+
+    function getYoYYM(ym) {
+      if(!ym) return null;
+      let [y, m] = ym.split('-').map(Number);
+      return `${y-1}-${String(m).padStart(2,'0')}`;
+    }
+
+    function getTargetYM() {
+      if(currentFilters.year !== 'ALL' && currentFilters.month !== 'ALL') {
+        return `${currentFilters.year.replace('년','')}-${currentFilters.month.replace('월','').padStart(2,'0')}`;
+      }
+      let allYMs = Array.from(new Set(rawSales.map(r => r._ym))).filter(x=>x).sort();
+      return allYMs.length > 0 ? allYMs[allYMs.length - 1] : null;
+    }
+
+    function getPrevYM(ym) {
+      if(!ym) return null;
+      let [y, m] = ym.split('-').map(Number);
+      let d = new Date(y, m - 2, 1);
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    }
+
+    function applyFilters() {
+      currentFilters.year = document.getElementById('filterYear').value;
+      currentFilters.month = document.getElementById('filterMonth').value;
+      currentFilters.ip = document.getElementById('filterIP').value;
+      currentFilters.code = document.getElementById('filterCode').value;
+
+      availableMonths.clear();
+      if (currentFilters.year !== 'ALL') {
+        rawSales.forEach(r => { if(r._y === currentFilters.year) availableMonths.add(r._m); });
+      }
+
+      renderKPI();
+      renderTrendChart(); 
+      updateTop20(currentTop20Type);
+    }
+
+    function renderKPI() {
+      let tRev = 0, qty = 0;
+      let pRev = 0, yRev = 0;
+      
+      let targetYM = getTargetYM();
+      let yoyYM = targetYM ? getYoYYM(targetYM) : null;
+
+      for(let i=0; i<rawSales.length; i++) {
+        let r = rawSales[i];
+        let eff = getEffectiveProduct(r, isMasterRenewal);
+
+        if (currentFilters.ip !== 'ALL' && eff.ip !== currentFilters.ip) continue;
+
+        let passCode = true;
+        if (currentFilters.code !== 'ALL') {
+          if (currentFilters.code === 'ETC') passCode = !['T1', 'P1', 'L1', 'T2'].includes(eff.type);
+          else passCode = (eff.type === currentFilters.code);
+        }
+        if (!passCode) continue;
+
+        if (isCurrentPeriod(r)) {
+          tRev += r._rev;
+          qty += r._qty;
+        }
+
+        if (currentFilters.year !== 'ALL' && currentFilters.month !== 'ALL') {
+          if (isPrevPeriod(r)) pRev += r._rev;
+          if (r._ym === yoyYM) yRev += r._rev;
+        } else if (currentFilters.year !== 'ALL' && currentFilters.month === 'ALL') {
+          if (isPrevPeriod(r)) yRev += r._rev; 
+        }
+      }
+      
+      document.getElementById('kpi-revenue').innerText = rawSales.length > 0 ? toHMil2(tRev) : '-';
+      document.getElementById('kpi-qty').innerText = rawSales.length > 0 ? formatNum(qty) : '-';
+      document.getElementById('kpi-asp').innerText = rawSales.length > 0 ? formatNum(qty > 0 ? tRev/qty : 0) : '-';
+
+      let momText = '', yoyText = '';
+
+      if (currentFilters.year !== 'ALL' && currentFilters.month === 'ALL') {
+        if(yRev > 0) {
+          let pct = ((tRev - yRev)/yRev)*100;
+          yoyText = pct > 0 ? `<span style="color:var(--color-up-500);">▲${pct.toFixed(1)}% (전년)</span>` : `<span style="color:var(--color-down-500);">▼${Math.abs(pct).toFixed(1)}% (전년)</span>`;
+        }
+      } else if (currentFilters.year !== 'ALL' && currentFilters.month !== 'ALL') {
+        if(pRev > 0) {
+          let pct = ((tRev - pRev)/pRev)*100;
+          momText = pct > 0 ? `<span style="color:var(--color-up-500);">▲${pct.toFixed(1)}% (전월)</span>` : `<span style="color:var(--color-down-500);">▼${Math.abs(pct).toFixed(1)}% (전월)</span>`;
+        }
+        if(yRev > 0) {
+          let pct = ((tRev - yRev)/yRev)*100;
+          yoyText = pct > 0 ? `<span style="color:var(--color-up-500);">▲${pct.toFixed(1)}% (전년)</span>` : `<span style="color:var(--color-down-500);">▼${Math.abs(pct).toFixed(1)}% (전년)</span>`;
+        }
+      }
+      
+      document.getElementById('kpi-rev-trends').innerHTML = `${momText} ${yoyText}`;
+    }
+
+    function toggleYoY() {
+      showYoY = !showYoY;
+      document.getElementById('btn-yoy').classList.toggle('active', showYoY);
+      renderTrendChart();
+    }
+
+    function renderTrendChart() {
+      let targetYM = getTargetYM();
+      if(!targetYM) {
+        clearChart('trendChart');
+        return;
+      }
+
+      let [ty, tm] = targetYM.split('-').map(Number);
+      let yms = [];
+      let prevYms = [];
+      for(let i=11; i>=0; i--) {
+        let d = new Date(ty, tm - 1 - i, 1);
+        yms.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+        let p = new Date(ty - 1, tm - 1 - i, 1);
+        prevYms.push(`${p.getFullYear()}-${String(p.getMonth() + 1).padStart(2, '0')}`);
+      }
+
+      let mData = {}; yms.forEach(ym => mData[ym] = 0);
+      let pData = {}; prevYms.forEach(ym => pData[ym] = 0);
+
+      for(let i=0; i<rawSales.length; i++) {
+        let r = rawSales[i];
+        let eff = getEffectiveProduct(r, isMasterRenewal);
+
+        if(currentFilters.ip !== 'ALL' && eff.ip !== currentFilters.ip) continue;
+
+        let passCode = true;
+        if (currentFilters.code !== 'ALL') {
+          if (currentFilters.code === 'ETC') passCode = !['T1', 'P1', 'L1', 'T2'].includes(eff.type);
+          else passCode = (eff.type === currentFilters.code);
+        }
+        if (!passCode) continue;
+
+        if(mData.hasOwnProperty(r._ym)) mData[r._ym] += r._rev;
+        if(pData.hasOwnProperty(r._ym)) pData[r._ym] += r._rev;
+      }
+
+      let labels = yms.map(ym => ym.substring(2).replace('-','.'));
+      let data = yms.map(ym => Math.round(mData[ym]/1000000));
+      let prevDataRaw = prevYms.map(ym => Math.round(pData[ym]/1000000));
+
+      let datasets = [{
+        label: '현재', data, backgroundColor: 'rgba(240, 185, 11, 0.1)', borderColor: '#F0B90B', borderWidth: 2, fill: true, tension: 0.3 
+      }];
+
+      if (showYoY) {
+        datasets.push({ label: '전년 동월', data: prevDataRaw, backgroundColor: 'transparent', borderColor: '#B7BDC6', borderWidth: 2, borderDash: [5, 5], fill: false, tension: 0.3 });
+        
+        let currLatest = data[data.length - 1];
+        let prevLatest = prevDataRaw[prevDataRaw.length - 1];
+        let trendText = '';
+        if (prevLatest > 0) {
+          let pct = ((currLatest - prevLatest)/prevLatest)*100;
+          if (pct > 0) trendText = `<span style="color:var(--color-up-500)">▲ ${pct.toFixed(1)}%</span>`;
+          else trendText = `<span style="color:var(--color-down-500)">▼ ${Math.abs(pct).toFixed(1)}%</span>`;
+        }
+        document.getElementById('yoy-trend-text').innerHTML = trendText;
+      } else {
+        document.getElementById('yoy-trend-text').innerHTML = '';
+      }
+      
+      clearChart('trendChart');
+      let suggestedMax = Math.max(...data, ...(showYoY ? prevDataRaw : []), 10) * 1.15;
+      charts['trendChart'] = new Chart(document.getElementById('trendChart').getContext('2d'), {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+          animation: false,
+          responsive: true,
+          maintainAspectRatio: false,
+          layout: { padding: { top: 25, left: 10, right: 15 } },
+          plugins: { 
+            legend: {display: false},
+            datalabels: { anchor: 'end', align: 'top', color: (ctx) => ctx.datasetIndex===0 ? '#1E2329' : '#848E9C', font: {weight:'bold', size:10}, formatter: (v) => v>0 ? formatNum(v) : '' }
+          },
+          scales: { x:{grid:{display:false}}, y:{grid:{color:'#EAECEF'}, beginAtZero:true, suggestedMax: suggestedMax} }
+        }
+      });
+    }
+
+    // 매출 TOP 20: 리뉴얼 합산 활성화 시 L열 서브품번(_subCode) 코드로 매출액/수량 합산
+    function updateTop20(type) {
+      currentTop20Type = type;
+      document.querySelectorAll('#top20Tabs .tab-btn').forEach(b => b.classList.toggle('active', (type==='ALL' && b.innerText==='전체') || b.innerText.includes(type)));
+      
+      const useRenewal = isMasterRenewal || isTop20Renewal;
+      let codeMap = {};
+
+      for(let i=0; i<rawSales.length; i++) {
+        let r = rawSales[i];
+        if(!isCurrentPeriod(r)) continue;
+
+        let eff = getEffectiveProduct(r, useRenewal);
+
+        if(currentFilters.ip !== 'ALL' && eff.ip !== currentFilters.ip) continue;
+
+        let passCode = true;
+        if (currentFilters.code !== 'ALL') {
+          if (currentFilters.code === 'ETC') passCode = !['T1', 'P1', 'L1', 'T2'].includes(eff.type);
+          else passCode = (eff.type === currentFilters.code);
+        }
+        if (!passCode) continue;
+
+        if(type === 'ALL' || eff.type === type) {
+          // L열 서브품번에 코드가 있을 경우 해당 코드(eff.code)를 기준으로 합산
+          let aggKey = eff.code;
+          if(!codeMap[aggKey]) {
+            codeMap[aggKey] = {
+              code: eff.code,
+              name: eff.name,
+              rev: 0,
+              qty: 0
+            };
+          }
+          codeMap[aggKey].rev += r._rev;
+          codeMap[aggKey].qty += r._qty;
+        }
+      }
+
+      let sorted = Object.values(codeMap).sort((a,b) => b.rev - a.rev).slice(0, 20);
+      let container = document.getElementById('top20Container');
+      container.innerHTML = '';
+
+      if(sorted.length === 0) {
+        container.innerHTML = '<div style="padding: 20px; text-align:center; color:var(--text-tertiary); font-size:12px;">데이터가 없습니다.</div>';
+        return;
+      }
+
+      let maxRev = sorted[0].rev;
+
+      sorted.forEach((item, idx) => {
+        let revMil = Math.round(item.rev / 1000000);
+        let pct = maxRev > 0 ? (item.rev / maxRev) * 100 : 0;
+        let name = item.name;
+
+        let row = document.createElement('div');
+        row.className = 'top20-row';
+        row.innerHTML = `
+          <div class="top20-label-area">
+            <div class="top20-rank">${idx + 1}</div>
+            <div class="top20-name" title="[${item.code}] ${name}">${name}</div>
+          </div>
+          <div class="top20-bar-area">
+            <div class="top20-bar-wrap">
+              <div class="top20-bar-fill" style="width: ${pct}%;"></div>
+            </div>
+            <div class="top20-value">${formatNum(revMil)}</div>
+          </div>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    function clearChart(id) {
+      if(charts[id]) {
+        charts[id].destroy();
+        delete charts[id];
+      }
+    }
+  </script>
+</body>
+</html>
